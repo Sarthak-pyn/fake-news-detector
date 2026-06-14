@@ -1,0 +1,78 @@
+import streamlit as st
+import joblib
+import matplotlib.pyplot as plt
+from wordcloud import WordCloud
+import pandas as pd
+
+model = joblib.load("model.pkl")
+tfidf = joblib.load("tfidf.pkl")
+
+st.set_page_config(page_title="Fake News Detector", layout="centered")
+st.title("Fake News Detector")
+st.markdown("Paste any news article below to check if it is Real or Fake")
+st.divider()
+
+if "history" not in st.session_state:
+    st.session_state.history = []
+
+news = st.text_area("Enter news article:", height=200)
+
+if st.button("Analyze", use_container_width=True):
+    if news.strip() == "":
+        st.warning("Please enter some text first!")
+    else:
+        transformed = tfidf.transform([news])
+        prediction = model.predict(transformed)[0]
+        probability = model.decision_function(transformed)[0]
+        confidence = min(abs(probability) / 5, 1.0)
+        label = "REAL" if prediction == 1 else "FAKE"
+
+        st.session_state.history.append({
+            "article": news[:80] + "...",
+            "result": label,
+            "confidence": str(round(confidence * 100, 1)) + "%"
+        })
+
+        st.divider()
+        if prediction == 1:
+            st.balloons()
+            st.success("REAL NEWS")
+            st.markdown("# This article appears to be REAL")
+            st.info("This article matches patterns of legitimate news sources.")
+        else:
+            st.error("FAKE NEWS DETECTED")
+            st.markdown("# This article appears to be FAKE")
+            st.warning("Do not share this article. It may contain misinformation!")
+            st.markdown("**Always verify from trusted sources: Reuters, BBC, AP News**")
+
+        st.markdown("### Confidence Score: " + str(round(confidence * 100, 1)) + "%")
+        st.progress(confidence)
+
+        st.divider()
+        st.markdown("### Word Cloud")
+        wordcloud = WordCloud(width=800, height=300, background_color="black", colormap="Reds" if prediction == 0 else "Greens").generate(news)
+        fig, ax = plt.subplots(figsize=(10, 3))
+        ax.imshow(wordcloud, interpolation="bilinear")
+        ax.axis("off")
+        st.pyplot(fig)
+
+        st.divider()
+        st.markdown("### Suspicious Words Detected")
+        suspicious = ["fake", "hoax", "conspiracy", "secret", "shocking", "unbelievable", "exclusive", "anonymous", "rumor", "claim", "allegedly", "hidden", "exposed", "leaked"]
+        found = [w for w in suspicious if w.lower() in news.lower()]
+        if found:
+            st.error("Suspicious words found: " + ", ".join(found))
+        else:
+            st.success("No suspicious words found!")
+
+if st.session_state.history:
+    st.divider()
+    st.markdown("### Analysis History")
+    df = pd.DataFrame(st.session_state.history)
+    st.dataframe(df, use_container_width=True)
+    if st.button("Clear History"):
+        st.session_state.history = []
+        st.rerun()
+
+st.divider()
+st.caption("Built with Python and Scikit-learn | Accuracy: 99.45%")
